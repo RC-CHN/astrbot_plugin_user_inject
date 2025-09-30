@@ -1,0 +1,12 @@
+{
+    "enabled_groups": {
+        "description": "启用此插件的群组 ID 列表。如果为空，则对所有群组生效。",
+        "type": "list",
+        "default": []
+    },
+    "user_prompts": {
+        "description": "用户 ID 与对应注入 prompt 的键值对列表。格式：[{\"user_id\": \"some_user_id\", \"prompt\": \"your_prompt\"}]",
+        "type": "list",
+        "default": []
+    }
+}
