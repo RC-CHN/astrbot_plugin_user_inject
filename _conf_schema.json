@@ -1,12 +1,19 @@
 {
+    "enable_private_chat": {
+        "description": "是否在私聊（包括 WebChat）中启用此插件。",
+        "type": "bool",
+        "default": true
+    },
     "enabled_groups": {
-        "description": "启用此插件的群组 ID 列表。如果为空，则对所有群组生效。",
+        "description": "启用此插件的群组 ID 列表。",
+        "hint": "如果为空，则对所有群组生效。",
         "type": "list",
         "default": []
     },
     "user_prompts": {
-        "description": "用户 ID 与对应注入 prompt 的键值对列表。格式：[{\"user_id\": \"some_user_id\", \"prompt\": \"your_prompt\"}]",
-        "type": "list",
-        "default": []
+        "description": "一个包含用户注入规则的 JSON 字符串。",
+        "hint": "内容应为一个列表，每个元素是包含 'user_id' 和 'prompt' 的对象。例如：[{\"user_id\": \"some_user_id\", \"prompt\": \"your_prompt\"}]",
+        "type": "string",
+        "default": "[{\"user_id\": \"astrbot\", \"prompt\": \"这是webchat聊天页面，请提醒用户这一点\"}]"
     }
 }
