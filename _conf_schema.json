@@ -15,5 +15,17 @@
         "hint": "内容应为一个列表，每个元素是包含 'user_id' 和 'prompt' 的对象。例如：[{\"user_id\": \"some_user_id\", \"prompt\": \"your_prompt\"}]",
         "type": "string",
         "default": "[{\"user_id\": \"astrbot\", \"prompt\": \"这是webchat聊天页面，请提醒用户这一点\"}]"
+    },
+    "default_prompt": {
+        "description": "为所有未在 '用户注入规则' 中指定的用户注入的默认 Prompt。",
+        "hint": "如果留空，则不为这些用户注入任何内容。",
+        "type": "string",
+        "default": ""
+    },
+    "inject_mode": {
+        "description": "全局注入模式，决定将 Prompt 添加到哪里。",
+        "hint": "可选值为 'system' 或 'user'。默认为 'system'。",
+        "type": "string",
+        "default": "system"
     }
 }

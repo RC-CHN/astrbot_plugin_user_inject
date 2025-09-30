@@ -12,6 +12,8 @@ class UserInjecter(Star):
         self.config = config
         self.enable_private_chat = self.config.get("enable_private_chat")
         self.enabled_groups = self.config.get("enabled_groups")
+        self.default_prompt = self.config.get("default_prompt")
+        self.inject_mode = self.config.get("inject_mode", "system")
         self.user_prompts = {}
         user_prompts_str = self.config.get("user_prompts")
         logger.debug(f"获取到 user_prompts 配置字符串: {user_prompts_str}")
@@ -40,6 +42,13 @@ class UserInjecter(Star):
         else:
             logger.debug(f"启用的群组: {self.enabled_groups}")
         logger.debug(f"处理后的用户 Prompts 字典: {self.user_prompts}")
+        if self.default_prompt:
+            logger.info(f"已加载默认 Prompt: {self.default_prompt}")
+    
+        if self.inject_mode not in ["system", "user"]:
+            logger.warning(f"无效的 inject_mode: '{self.inject_mode}'，将回退到 'system' 模式。")
+            self.inject_mode = "system"
+        logger.info(f"全局注入模式: {self.inject_mode}")
     
     def _log_request_details(self, event: AstrMessageEvent):
         group_id = event.get_group_id()
@@ -72,11 +81,24 @@ class UserInjecter(Star):
         elif self.enabled_groups and group_id not in self.enabled_groups:
             return
 
+        prompt_to_inject = None
         # 检查用户是否在配置的列表中
         if sender_id in self.user_prompts:
             prompt_to_inject = self.user_prompts[sender_id]
-            req.system_prompt += f"\n{prompt_to_inject}"
-            logger.info(f"为用户 {sender_id} 注入了 System Prompt: {prompt_to_inject}")
+            logger.info(f"为特定用户 {sender_id} 找到注入规则。")
+        # 如果特定用户未匹配到，且存在默认 prompt，则使用默认 prompt
+        elif self.default_prompt:
+            prompt_to_inject = self.default_prompt
+            logger.info(f"为用户 {sender_id} 应用默认注入规则。")
+
+        if prompt_to_inject:
+            if self.inject_mode == "system":
+                req.system_prompt += f"\n{prompt_to_inject}"
+                logger.info(f"向 System Prompt 注入内容: {prompt_to_inject}")
+            elif self.inject_mode == "user":
+                # 在用户真实输入前插入一条 user role 的消息
+                req.contexts.append({"role": "user", "content": prompt_to_inject})
+                logger.info(f"向 User Context 注入内容: {prompt_to_inject}")
 
     async def terminate(self):
         """可选择实现异步的插件销毁方法，当插件被卸载/停用时会调用。"""
