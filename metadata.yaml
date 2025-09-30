@@ -1,5 +1,5 @@
 name: astrbot_plugin_user_inject 
-desc: https://github.com/RC-CHN/astrbot_plugin_user_inject 
+desc: 根据用户id动态注入system_prompt
 version: 1.0.0 
 author: RC-CHN 
-repo: https://github.com/Soulter/helloworld 
+repo: https://github.com/RC-CHN/astrbot_plugin_user_inject 
