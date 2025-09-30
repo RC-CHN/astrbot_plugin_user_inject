@@ -6,7 +6,7 @@ from astrbot.api import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
 
 @register("astrbot_plugin_user_inject", "RC-CHN", "根据用户ID注入不同system_prompt", "1.0.0")
-class user_injecter(Star):
+class UserInjecter(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
@@ -39,12 +39,7 @@ class user_injecter(Star):
             logger.debug("配置中未指定启用的群组，插件将对所有群组生效。")
         else:
             logger.debug(f"启用的群组: {self.enabled_groups}")
-        
-        # 打印从配置中读取到的原始 user_prompts
-        raw_user_prompts = self.config.get("user_prompts")
-        logger.debug(f"从配置中读取到的原始 user_prompts: {raw_user_prompts}")
-        
-        logger.info(f"处理后的用户 Prompts 字典: {self.user_prompts}")
+        logger.debug(f"处理后的用户 Prompts 字典: {self.user_prompts}")
     
     def _log_request_details(self, event: AstrMessageEvent):
         group_id = event.get_group_id()
