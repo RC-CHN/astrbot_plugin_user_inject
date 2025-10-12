@@ -1,4 +1,5 @@
 import json
+import re
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.provider import ProviderRequest
 from astrbot.api.star import Context, Star, register
@@ -16,16 +17,17 @@ class UserInjecter(Star):
         self.inject_mode = self.config.get("inject_mode", "system")
         self.user_prompts = {}
         user_prompts_str = self.config.get("user_prompts")
-        logger.debug(f"获取到 user_prompts 配置字符串: {user_prompts_str}")
 
         if user_prompts_str and isinstance(user_prompts_str, str):
             try:
                 user_prompts_list = json.loads(user_prompts_str)
                 if isinstance(user_prompts_list, list):
                     self.user_prompts = {
-                        item['user_id']: item['prompt']
+                        item["user_id"]: item["prompt"]
                         for item in user_prompts_list
-                        if isinstance(item, dict) and 'user_id' in item and 'prompt' in item
+                        if isinstance(item, dict)
+                        and "user_id" in item
+                        and "prompt" in item
                     }
                     logger.info(f"成功解析并加载 {len(self.user_prompts)} 条用户注入规则。")
                 else:
@@ -41,7 +43,6 @@ class UserInjecter(Star):
             logger.debug("配置中未指定启用的群组，插件将对所有群组生效。")
         else:
             logger.debug(f"启用的群组: {self.enabled_groups}")
-        logger.debug(f"处理后的用户 Prompts 字典: {self.user_prompts}")
         if self.default_prompt:
             logger.info(f"已加载默认 Prompt: {self.default_prompt}")
     
@@ -63,7 +64,8 @@ class UserInjecter(Star):
         logger.debug(f"  - 统一会话 ID (Unified Origin): {unified_msg_origin}")
         logger.debug("-----------------------------------------")
 
-    @filter.on_llm_request()
+
+    @filter.on_llm_request(priority=-10000)
     async def on_llm_request(self, event: AstrMessageEvent, req: ProviderRequest):
         """
         在 LLM 请求时触发，可以修改请求内容
@@ -93,12 +95,101 @@ class UserInjecter(Star):
 
         if prompt_to_inject:
             if self.inject_mode == "system":
-                req.system_prompt += f"\n{prompt_to_inject}"
+                req.system_prompt = f"{prompt_to_inject}\n{req.system_prompt}"
                 logger.info(f"向 System Prompt 注入内容: {prompt_to_inject}")
             elif self.inject_mode == "user":
                 # 在用户真实输入前插入一条 user role 的消息
                 req.contexts.append({"role": "user", "content": prompt_to_inject})
                 logger.info(f"向 User Context 注入内容: {prompt_to_inject}")
+
+    def _normalize_user_id(self, user_id) -> str:
+        return "" if user_id is None else str(user_id)
+
+    def _persist_user_prompts(self):
+        serialized = json.dumps(
+            [
+                {"user_id": uid, "prompt": prompt}
+                for uid, prompt in self.user_prompts.items()
+            ],
+            ensure_ascii=False,
+        )
+        self.config["user_prompts"] = serialized
+        save_config = getattr(self.config, "save_config", None)
+        if callable(save_config):
+            try:
+                save_config()
+                logger.debug("用户个性化提示词已写入配置文件。")
+            except Exception as exc:
+                logger.error(f"保存用户提示词配置失败: {exc}")
+        else:
+            logger.warning("当前配置对象不支持 save_config，用户提示词仅保存在内存中。")
+
+    @filter.command("查看提示词", alias={"查询提示词", "提示词查看", "viewprompt", "showprompt"})
+    async def prompt_view(self, event: AstrMessageEvent):
+        astrbot_config = self.context.get_config()
+        command_prefixes = astrbot_config.get('wake_prefix', ['/'])
+        user_id = self._normalize_user_id(event.get_sender_id())
+        prompt = self.user_prompts.get(user_id)
+        if prompt:
+            return MessageEventResult().message(f"{prompt}")
+        logger.info(f"用户 {user_id} 查询提示词但未设置。")
+        return MessageEventResult().message(f"你还没有设置专属提示词，可使用\n“{command_prefixes[0]}添加提示词 你的内容”进行设置。")
+
+    @filter.command(
+        "添加提示词",
+        alias={"设置提示词", "修改提示词", "更新提示词"},
+    )
+    async def prompt_set(
+        self,
+        event: AstrMessageEvent,
+    ):
+        message_content = (event.message_str or "").strip()
+        astrbot_config = self.context.get_config()
+        command_prefixes = astrbot_config.get('wake_prefix', ['/'])
+        command_variants = [
+            "添加提示词",
+            "设置提示词",
+            "修改提示词",
+            "更新提示词"
+        ]
+        pattern_cmd = r"^[^\S\r\n]*(" + "|".join(re.escape(name) for name in command_variants) + r")\s*"
+        prompt_text = re.sub(pattern_cmd, "", message_content, flags=re.IGNORECASE).strip()
+        if not prompt_text:
+            return MessageEventResult().message(
+                f"用法：{command_prefixes[0]}添加提示词 你的提示词内容\n"
+                f"“{command_prefixes[0]}查看提示词”查看当前内容。\n"
+                 f"“{command_prefixes[0]}删除提示词”清除设置的提示词。"
+            )
+
+        user_id = self._normalize_user_id(event.get_sender_id())
+        previous = self.user_prompts.get(user_id)
+        self.user_prompts[user_id] = prompt_text
+        self._persist_user_prompts()
+
+        if previous:
+            logger.info(f"用户 {user_id} 更新了自己的提示词。")
+            return MessageEventResult().message("提示词已更新。")
+
+        logger.info(f"用户 {user_id} 新增了自己的提示词。")
+        return MessageEventResult().message("提示词已保存。")
+
+    @filter.command(
+        "清空提示词",
+        alias={"删除提示词", "移除提示词", "reset提示词"},
+    )
+    async def prompt_clear(self, event: AstrMessageEvent):
+        astrbot_config = self.context.get_config()
+        command_prefixes = astrbot_config.get('wake_prefix', ['/'])
+        user_id = self._normalize_user_id(event.get_sender_id())
+        if user_id in self.user_prompts:
+            del self.user_prompts[user_id]
+            self._persist_user_prompts()
+            logger.info(f"用户 {user_id} 已清空提示词。")
+            return MessageEventResult().message("提示词已清空。")
+        logger.info(f"用户 {user_id} 尝试清空提示词，但尚未设置。")
+        return MessageEventResult().message(
+            f"你还没有设置提示词，可使用“{command_prefixes[0]}添加提示词 你的内容”先进行设置。"
+        )
 
     async def terminate(self):
         """可选择实现异步的插件销毁方法，当插件被卸载/停用时会调用。"""
